@@ -1,0 +1,32 @@
+Target Return $\alpha = 0.14/250$,,,,,
+Rebalance Schedule,Optimization Type,AR,SD,SR,MDD
+Fixed every 80 Days: 26 Rebalancing Points,Equal Weight,0,0,0,0
+,MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+Fixed every 173 Days: 12 Rebalancing Points,Equal Weight,0,0,0,0
+,MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+Fixed every 296 Days: 7 Rebalancing Points,Equal Weight,0,0,0,0
+,MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+Dynamic: 26 Rebalancing Points,Equal Weight,0,0,0,0
+"WRCP: $n = 60 , \theta= 0.075, \text{ARL} = 1000$",MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+Dynamic: 12 Rebalancing Points,Equal Weight,0,0,0,0
+"WRCP: $n = 90 , \theta= 0.075, \text{ARL} = 1000$",MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+Dynamic: 7 Rebalancing Points,Equal Weight,0,0,0,0
+"WRCP: $n = 60 , \theta = 1, \text{ARL} = 10000$",MVO,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
+,DRMVO: $\delta=(0.5 \alpha)^2$,0,0,0,0
