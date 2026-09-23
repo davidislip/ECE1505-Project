@@ -1,0 +1,10 @@
+numpy
+pandas
+scipy
+cvxpy
+scikit-learn
+matplotlib
+seaborn
+jupyter
+# only needed to re-download stocks.pkl
+yfinance
