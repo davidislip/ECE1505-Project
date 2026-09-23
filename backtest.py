@@ -189,9 +189,9 @@ def RetStats(returns):
 
 
 def summary_stats(Results):
-    """Table of drawdown and return statistics for each backtest in ``Results``."""
+    """Table of drawdown and return statistics for each wealth series in ``Results``."""
     Stats = {}
-    for key, (_, _, Wealth) in Results.items():
+    for key, Wealth in Results.items():
         returns = Wealth.pct_change().dropna(axis=0)
         mdd, start, end = max_dd(returns)
         AR, SD, SR = RetStats(returns)
