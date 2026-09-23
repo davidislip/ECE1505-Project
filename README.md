@@ -11,7 +11,7 @@ Rebalancing times are chosen by a Wasserstein robust hypothesis test (Gao et al.
 | `Data_ChangeDetection.ipynb` | Main notebook: data, derivations, change point detection, backtests |
 | `Plots.ipynb` | Rebalancing-times figure for the report (`Images/cp.png`) |
 | `changepoint.py` | Robust hypothesis test, CUSUM detector, ARL bound, rebalancing schedule |
-| `backtest.py` | Portfolio strategies (equal weight, MVO, DRMVO), backtest, summary statistics |
+| `backtest.py` | Portfolio strategies (equal weight, MVO, DRMVO with l2 or Mahalanobis transport cost, sample or Ledoit-Wolf covariance), backtest, summary statistics |
 | `data.py` | Loads and cleans `stocks.pkl` |
 | `generate_results.py` | Runs the change point search over the parameter grid into `Results/` |
 | `Results/` | One pickle per `theta_ARLtarget_n` combination |
@@ -29,6 +29,15 @@ jupyter notebook Data_ChangeDetection.ipynb
 ## Conventions
 
 `R = P.pct_change().dropna()`, so `R.iloc[i]` is the return from `P.iloc[i]` to `P.iloc[i+1]` and is only known at price index `i+1`. Change points are R indices; rebalancing times are P indices, and the weights at `P.iloc[t]` are estimated from `R.iloc[est:t]`, so the backtest does not look ahead.
+
+## Robust portfolio variants
+
+`blanchet_mvo` supports two transport costs:
+
+- `norm="l2"`: the Euclidean cost.
+- `norm="mahalanobis"`: cost $(u-v)^\top \bar\sigma^2\Sigma^{-1}(u-v)$, which makes the robustness penalty $\sqrt{\delta}\sqrt{x^\top\Sigma x}/\bar\sigma$.
+
+`shrink` (variance term) and `shrink_norm` (Mahalanobis norm) each choose between the sample covariance and the Ledoit-Wolf estimate. The derivation is in the notebook.
 
 ## Caveats
 

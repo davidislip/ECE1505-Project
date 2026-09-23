@@ -1,27 +1,41 @@
 """Portfolio strategies and the rebalancing backtest."""
 import warnings
+from collections import Counter
 
 import cvxpy as cp
 import numpy as np
 import pandas as pd
+from sklearn.covariance import ledoit_wolf_shrinkage
 
 TRADING_DAYS = 250
 
 
-def _cov_sqrt(R):
-    """Symmetric PSD square root of the sample covariance.
+def cov_factor(R, shrink=False):
+    """Matrix F with F.T @ F equal to the covariance estimate of ``R``.
 
-    With fewer observations than assets the sample covariance is singular, so
-    tiny negative eigenvalues from round-off are clipped instead of letting
-    scipy.linalg.sqrtm return complex values.
+    ``shrink=False`` gives the sample covariance ``R.cov()``. ``shrink=True``
+    gives the Ledoit-Wolf estimate ``(1 - s) S + s mu I`` with ``S`` the
+    maximum likelihood covariance and ``mu = trace(S) / m``. Using a factor
+    instead of the m x m matrix keeps the conic problems small (the sample
+    covariance has rank < T << m) and avoids matrix square roots of a
+    singular matrix.
     """
-    w, V = np.linalg.eigh(R.cov().values)
-    return (V * np.sqrt(np.clip(w, 0, None))) @ V.T
+    X = R.values - R.values.mean(axis=0)
+    T, m = X.shape
+    if not shrink:
+        return X / np.sqrt(T - 1)
+    s = ledoit_wolf_shrinkage(X, assume_centered=True)
+    mu = np.sum(X ** 2) / (T * m)
+    return np.vstack([np.sqrt((1 - s) / T) * X, np.sqrt(s * mu) * np.eye(m)])
 
 
 def equal_weight(R):
     N_assets = len(R.columns)
     return 1 / N_assets * np.ones(N_assets)
+
+
+# number of times each strategy fell back to equal weight
+FALLBACKS = Counter()
 
 
 def _solve_or_equal_weight(prob, x, name):
@@ -30,15 +44,16 @@ def _solve_or_equal_weight(prob, x, name):
     except cp.SolverError:
         pass
     if x.value is None or prob.status not in (cp.OPTIMAL, cp.OPTIMAL_INACCURATE):
+        FALLBACKS[name] += 1
         warnings.warn("%s: problem %s, falling back to equal weight" % (name, prob.status))
         m = x.shape[0]
         return 1 / m * np.ones(m)
     return x.value
 
 
-def markowitz_mvo(R, alpha_val):
+def markowitz_mvo(R, alpha_val, shrink=False):
     """Long-only minimum variance portfolio with daily expected return >= alpha_val."""
-    cov_half = _cov_sqrt(R)
+    F = cov_factor(R, shrink)
     mean_ = R.mean().values
     m = R.shape[1]
 
@@ -46,30 +61,63 @@ def markowitz_mvo(R, alpha_val):
     constraints = [x >= 0,
                    cp.sum(x) == 1,
                    mean_ @ x >= alpha_val]
-    objective = cp.Minimize(cp.sum_squares(cov_half @ x))
-    return _solve_or_equal_weight(cp.Problem(objective, constraints), x, "markowitz_mvo")
+    objective = cp.Minimize(cp.sum_squares(F @ x))
+    return _solve_or_equal_weight(cp.Problem(objective, constraints), x, "markowitz_mvo" + ("_shrink" if shrink else ""))
 
 
-def blanchet_mvo(R, delta_val, alpha_val, norm_p=2):
+def blanchet_mvo(R, delta_val, alpha_val, norm="l2", shrink=False, shrink_norm=None):
     """Wasserstein distributionally robust mean-variance (Blanchet, Chen & Zhou).
 
-    With transport cost ||u - v||_q^2 the robust problem penalises ||x||_p,
-    where 1/p + 1/q = 1; ``norm_p=2`` is the Euclidean cost. Note that
-    ``norm_p=1`` makes the penalty constant under the long-only budget
-    constraint, which reduces the problem to MVO with target
-    ``alpha_val + sqrt(delta_val)``.
+    For an order-2 Wasserstein ball of radius ``delta_val`` around the
+    empirical distribution with transport cost ``||u - v||^2`` the problem is
+
+        min  sqrt(x' S x) + sqrt(delta) ||x||_*
+        s.t. mean' x >= alpha + sqrt(delta) ||x||_*,  x >= 0,  sum(x) = 1
+
+    where ``||.||_*`` is the dual of the norm in the transport cost and ``S``
+    is the covariance estimate (the square of the objective in the paper has
+    the same minimiser).
+
+    ``norm``:
+
+    * ``"l2"``: Euclidean cost, ``||x||_* = ||x||_2``. (``"l1"`` is accepted
+      but is constant under the long-only budget constraint, so it reduces
+      to MVO with target ``alpha + sqrt(delta)``.)
+    * ``"mahalanobis"``: cost ``(u - v)' Lambda (u - v)`` with
+      ``Lambda = sigma2 * Sigma^-1``, so ``||x||_* = sqrt(x' Sigma x) / sigma``
+      where ``sigma2 = trace(Sigma) / m``. The scaling makes the cost equal
+      to the Euclidean one when ``Sigma = sigma2 * I``, so ``delta`` is on
+      the same scale as for ``"l2"``. Moving mass along high-variance
+      directions is cheap, so the adversary perturbs the returns in the
+      directions the data already varies in.
+
+    ``shrink`` selects Ledoit-Wolf shrinkage for the covariance in the
+    variance term and ``shrink_norm`` (default: same as ``shrink``) for the
+    ``Sigma`` in the Mahalanobis norm.
     """
-    cov_half = _cov_sqrt(R)
+    if shrink_norm is None:
+        shrink_norm = shrink
+    F = cov_factor(R, shrink)
     mean_ = R.mean().values
     m = R.shape[1]
     x = cp.Variable(m)
-    penalty = np.sqrt(delta_val) * cp.norm(x, norm_p)
+    name = "blanchet_mvo_%s%s" % (norm, "_shrink" if shrink else "")
+    if norm == "mahalanobis":
+        name += "_shrinknorm" if shrink_norm else ""
+        F_norm = F if shrink_norm == shrink else cov_factor(R, shrink_norm)
+        sigma = np.sqrt(np.sum(F_norm ** 2) / m)
+        dual_norm = cp.norm(F_norm @ x, 2) / sigma
+    elif norm in ("l1", "l2"):
+        dual_norm = cp.norm(x, int(norm[1]))
+    else:
+        raise ValueError("unknown norm %r" % norm)
+    penalty = np.sqrt(delta_val) * dual_norm
 
     constraints = [x >= 0,
                    cp.sum(x) == 1,
                    mean_ @ x >= alpha_val + penalty]
-    objective = cp.Minimize(cp.norm(cov_half @ x, 2) + penalty)
-    return _solve_or_equal_weight(cp.Problem(objective, constraints), x, "blanchet_mvo")
+    objective = cp.Minimize(cp.norm(F @ x, 2) + penalty)
+    return _solve_or_equal_weight(cp.Problem(objective, constraints), x, name)
 
 
 def fixed_schedule(period, n_prices):
@@ -101,7 +149,6 @@ def test_variable_strategy(R, P, rebal, est, strategy, function_params=()):
 
     #1 over n dollars for each stock
     w = equal_weight(R)
-    starts = np.concatenate(([0], rebal))
     ends = np.append(rebal, len(P))
     h = w / prices[0]
     holdings_t[:, :ends[0]] = h[:, None]
